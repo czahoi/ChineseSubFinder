@@ -3,15 +3,17 @@ package dao
 import (
 	"errors"
 	"fmt"
-	"github.com/allanpk716/ChineseSubFinder/internal/models"
-	"github.com/allanpk716/ChineseSubFinder/internal/pkg"
-	"github.com/allanpk716/ChineseSubFinder/internal/pkg/log_helper"
-	"github.com/allanpk716/ChineseSubFinder/internal/pkg/sqlite"
-	"gorm.io/gorm"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sync"
+
+	"gorm.io/gorm/logger"
+
+	"github.com/ChineseSubFinder/ChineseSubFinder/pkg"
+
+	"github.com/ChineseSubFinder/ChineseSubFinder/internal/models"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 // GetDb 获取数据库实例
@@ -20,7 +22,6 @@ func GetDb() *gorm.DB {
 		once.Do(func() {
 			err := InitDb()
 			if err != nil {
-				log_helper.GetLogger().Errorln("dao.InitDb()", err)
 				panic(err)
 			}
 		})
@@ -57,10 +58,6 @@ func InitDb() error {
 	var err error
 	// 新建数据库
 	nowDbFileName := getDbName()
-	if nowDbFileName == "" {
-		return errors.New(fmt.Sprintf(`InitDb().getDbName() is empty, not support this OS.
-you need implement getDbName() in file: internal/dao/init.go `))
-	}
 
 	dbDir := filepath.Dir(nowDbFileName)
 	if pkg.IsDir(dbDir) == false {
@@ -70,8 +67,17 @@ you need implement getDbName() in file: internal/dao/init.go `))
 	if err != nil {
 		return errors.New(fmt.Sprintf("failed to connect database, %s", err.Error()))
 	}
+	// 降低 gorm 的日志级别
+	db.Logger = logger.Default.LogMode(logger.Silent)
 	// 迁移 schema
-	err = db.AutoMigrate(&models.HotFix{}, &models.SubFormatRec{})
+	err = db.AutoMigrate(&models.HotFix{}, &models.SubFormatRec{},
+		&models.IMDBInfo{}, &models.VideoSubInfo{},
+		&models.ThirdPartSetVideoPlayedInfo{},
+		&models.MediaInfo{},
+		&models.LowVideoSubInfo{},
+		&models.Info{},
+		&models.SkipScanInfo{},
+	)
 	if err != nil {
 		return errors.New(fmt.Sprintf("db AutoMigrate error, %s", err.Error()))
 	}
@@ -80,15 +86,7 @@ you need implement getDbName() in file: internal/dao/init.go `))
 }
 
 func getDbName() string {
-	nowDbFileName := ""
-	sysType := runtime.GOOS
-	if sysType == "linux" {
-		nowDbFileName = dbFileNameLinux
-	}
-	if sysType == "windows" {
-		nowDbFileName = dbFileNameWindows
-	}
-	return nowDbFileName
+	return filepath.Join(pkg.GetConfigRootDirFPath(), dbFileName)
 }
 
 var (
@@ -97,6 +95,5 @@ var (
 )
 
 const (
-	dbFileNameLinux   = "/config/settings.db"
-	dbFileNameWindows = "settings.db"
+	dbFileName = "ChineseSubFinder-Cache.db"
 )
